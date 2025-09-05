@@ -13,7 +13,7 @@ import {
   Phone,
   Navigation2
 } from 'lucide-react';
-import DonationMap from '@/components/DonationMap';
+import BasicMap from '@/components/BasicMap';
 import RouteOptimizer from '@/components/RouteOptimizer';
 
 const DonationPoints = () => {
@@ -99,7 +99,7 @@ const DonationPoints = () => {
           </div>
 
           <TabsContent value="mapa" className="space-y-6">
-            <DonationMap />
+            <BasicMap />
           </TabsContent>
 
           <TabsContent value="rotas" className="space-y-6">

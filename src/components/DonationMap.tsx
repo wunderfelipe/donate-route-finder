@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Navigation, Plus, Route, Car, Clock, Trash2 } from 'lucide-react';
+import { MapPin, Navigation, Plus, Route, Car, Clock, Trash2, Zap } from 'lucide-react';
 
 interface DonationPoint {
   id: string;
@@ -27,11 +30,13 @@ const DonationMap = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<any>(null);
   const [mapboxToken, setMapboxToken] = useState('');
-  const [showTokenInput, setShowTokenInput] = useState(true);
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [useAdvancedMap, setUseAdvancedMap] = useState(false);
   const [selectedPoints, setSelectedPoints] = useState<string[]>([]);
   const [currentRoute, setCurrentRoute] = useState<RouteData | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
   
   const [pontos] = useState<DonationPoint[]>([
     {
@@ -91,13 +96,19 @@ const DonationMap = () => {
     }
   ]);
 
-  // Salvar token no localStorage
+  // Configurar ícones do Leaflet
   useEffect(() => {
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    });
+
     const savedToken = localStorage.getItem('mapboxToken');
     if (savedToken) {
       setMapboxToken(savedToken);
-      setShowTokenInput(false);
-      initializeMap(savedToken);
+      setUseAdvancedMap(true);
     }
   }, []);
 
@@ -350,13 +361,93 @@ const DonationMap = () => {
     return hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`;
   };
 
+  const calculateBasicRoute = () => {
+    if (selectedPoints.length < 2) return;
+    
+    const selectedPontos = pontos.filter(p => selectedPoints.includes(p.id));
+    const coords: [number, number][] = selectedPontos.map(p => [p.lat, p.lng]);
+    setRouteCoords(coords);
+    
+    // Cálculo básico de distância (aproximado)
+    let totalDistance = 0;
+    for (let i = 0; i < coords.length - 1; i++) {
+      const dist = calculateDistance(coords[i], coords[i + 1]);
+      totalDistance += dist;
+    }
+    
+    setCurrentRoute({
+      distance: totalDistance * 1000, // converter para metros
+      duration: (totalDistance / 50) * 3600, // velocidade média 50km/h
+      geometry: coords.map(c => [c[1], c[0]]) // converter para lng,lat
+    });
+  };
+
+  const calculateDistance = (coord1: [number, number], coord2: [number, number]) => {
+    const R = 6371; // Raio da Terra em km
+    const dLat = (coord2[0] - coord1[0]) * Math.PI / 180;
+    const dLon = (coord2[1] - coord1[1]) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(coord1[0] * Math.PI / 180) * Math.cos(coord2[0] * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const createCustomIcon = (type: string, selected: boolean) => {
+    const color = type === 'coleta' ? '#22c55e' : '#f59e0b';
+    const size = selected ? 35 : 25;
+    
+    return L.divIcon({
+      className: 'custom-marker',
+      html: `<div style="
+        width: ${size}px;
+        height: ${size}px;
+        background-color: ${color};
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        ${selected ? 'transform: scale(1.2);' : ''}
+      ">
+        <svg width="12" height="12" fill="white" viewBox="0 0 24 24">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      </div>`,
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2]
+    });
+  };
+
   return (
     <div className="space-y-6">
+      {!useAdvancedMap && (
+        <Card className="p-4 bg-gradient-warm border-accent/20 shadow-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold mb-1">Mapa Básico Ativo</h3>
+              <p className="text-sm text-muted-foreground">
+                Upgrade para mapa avançado com Mapbox para rotas otimizadas
+              </p>
+            </div>
+            <Button 
+              onClick={() => setShowTokenInput(true)} 
+              className="bg-gradient-primary gap-2"
+              size="sm"
+            >
+              <Zap className="w-4 h-4" />
+              Upgrade
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {showTokenInput && (
         <Card className="p-6 bg-gradient-warm border-accent/20 shadow-soft">
-          <h3 className="text-lg font-semibold mb-4">Configure o Mapa Interativo</h3>
+          <h3 className="text-lg font-semibold mb-4">Configure o Mapa Avançado</h3>
           <p className="text-muted-foreground mb-4 text-sm">
-            Para usar o mapa interativo com rotas (similar ao Google Maps), insira seu token público do Mapbox.
+            Para usar rotas otimizadas e navegação avançada, insira seu token público do Mapbox.
             Você pode obter um gratuitamente em{' '}
             <a 
               href="https://mapbox.com/" 
@@ -375,7 +466,7 @@ const DonationMap = () => {
               className="flex-1"
             />
             <Button onClick={handleTokenSubmit} className="bg-gradient-primary">
-              Carregar Mapa
+              Ativar Mapa Avançado
             </Button>
           </div>
         </Card>
@@ -384,24 +475,72 @@ const DonationMap = () => {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <Card className="overflow-hidden shadow-card">
-            <div 
-              ref={mapContainer} 
-              className="w-full h-[600px] bg-muted flex items-center justify-center"
-            >
-              {showTokenInput && (
-                <div className="text-center text-muted-foreground">
-                  <MapPin className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <h3 className="text-lg font-semibold mb-2">Mapa Interativo</h3>
-                  <p>Configure o token do Mapbox para usar:</p>
-                  <ul className="text-sm mt-2 space-y-1">
-                    <li>• Navegação estilo Google Maps</li>
-                    <li>• Cálculo de rotas otimizadas</li>
-                    <li>• Localização em tempo real</li>
-                    <li>• Marcadores interativos</li>
-                  </ul>
-                </div>
-              )}
-            </div>
+            {useAdvancedMap ? (
+              <div 
+                ref={mapContainer} 
+                className="w-full h-[600px] bg-muted"
+              />
+            ) : (
+              <MapContainer
+                center={[-23.5505, -46.6333]}
+                zoom={12}
+                className="w-full h-[600px]"
+                zoomControl={true}
+                scrollWheelZoom={true}
+              >
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                />
+                
+                {pontos.map((ponto) => (
+                  <Marker
+                    key={ponto.id}
+                    position={[ponto.lat, ponto.lng]}
+                    icon={createCustomIcon(ponto.type, selectedPoints.includes(ponto.id))}
+                    eventHandlers={{
+                      click: () => togglePointSelection(ponto.id)
+                    }}
+                  >
+                    <Popup>
+                      <div className="p-2 max-w-xs">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-sm">{ponto.name}</h3>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            ponto.priority === 'alta' ? 'bg-red-100 text-red-800' :
+                            ponto.priority === 'media' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {ponto.priority}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600 mb-2">{ponto.address}</p>
+                        <p className="text-xs mb-2">⏰ {ponto.horario}</p>
+                        {ponto.telefone && (
+                          <p className="text-xs mb-2">📞 {ponto.telefone}</p>
+                        )}
+                        <Button 
+                          size="sm" 
+                          onClick={() => togglePointSelection(ponto.id)}
+                          className={selectedPoints.includes(ponto.id) ? 'bg-red-500' : 'bg-primary'}
+                        >
+                          {selectedPoints.includes(ponto.id) ? 'Remover' : 'Adicionar'}
+                        </Button>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+
+                {routeCoords.length > 1 && (
+                  <Polyline
+                    positions={routeCoords}
+                    color="#22c55e"
+                    weight={4}
+                    opacity={0.8}
+                  />
+                )}
+              </MapContainer>
+            )}
           </Card>
         </div>
 
@@ -417,13 +556,13 @@ const DonationMap = () => {
             
             <div className="flex gap-2 mb-4">
               <Button 
-                onClick={calculateRoute}
+                onClick={useAdvancedMap ? calculateRoute : calculateBasicRoute}
                 disabled={selectedPoints.length < 2}
                 className="flex-1 bg-gradient-primary text-sm"
                 size="sm"
               >
                 <Route className="w-4 h-4 mr-1" />
-                Calcular Rota
+                {useAdvancedMap ? 'Rota Avançada' : 'Rota Básica'}
               </Button>
               <Button 
                 onClick={clearRoute}

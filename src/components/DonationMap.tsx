@@ -98,19 +98,12 @@ const DonationMap = () => {
 
   // Configurar ícones do Leaflet
   useEffect(() => {
-    console.log('Configurando ícones do Leaflet...');
-    try {
-      // Fix para ícones do Leaflet
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-      });
-      console.log('Ícones configurados com sucesso');
-    } catch (error) {
-      console.error('Erro ao configurar ícones:', error);
-    }
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    });
 
     const savedToken = localStorage.getItem('mapboxToken');
     if (savedToken) {
@@ -401,36 +394,30 @@ const DonationMap = () => {
   };
 
   const createCustomIcon = (type: string, selected: boolean) => {
-    try {
-      console.log('Criando ícone customizado para:', type, selected);
-      const color = type === 'coleta' ? '#22c55e' : '#f59e0b';
-      const size = selected ? 35 : 25;
-      
-      return L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="
-          width: ${size}px;
-          height: ${size}px;
-          background-color: ${color};
-          border: 3px solid white;
-          border-radius: 50%;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          ${selected ? 'transform: scale(1.2);' : ''}
-        ">
-          <svg width="12" height="12" fill="white" viewBox="0 0 24 24">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-        </div>`,
-        iconSize: [size, size],
-        iconAnchor: [size/2, size/2]
-      });
-    } catch (error) {
-      console.error('Erro ao criar ícone customizado:', error);
-      return L.marker([0, 0]).options.icon; // fallback
-    }
+    const color = type === 'coleta' ? '#22c55e' : '#f59e0b';
+    const size = selected ? 35 : 25;
+    
+    return L.divIcon({
+      className: 'custom-marker',
+      html: `<div style="
+        width: ${size}px;
+        height: ${size}px;
+        background-color: ${color};
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        ${selected ? 'transform: scale(1.2);' : ''}
+      ">
+        <svg width="12" height="12" fill="white" viewBox="0 0 24 24">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      </div>`,
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2]
+    });
   };
 
   return (

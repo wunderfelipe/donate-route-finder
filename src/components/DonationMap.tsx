@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MapPin, Navigation, Plus } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { MapPin, Navigation, Plus, Route, Car, Clock, Trash2 } from 'lucide-react';
 
 interface DonationPoint {
   id: string;
@@ -13,12 +14,25 @@ interface DonationPoint {
   type: 'coleta' | 'distribuicao';
   horario: string;
   telefone?: string;
+  priority?: 'alta' | 'media' | 'baixa';
+}
+
+interface RouteData {
+  distance: number;
+  duration: number;
+  geometry: number[][];
 }
 
 const DonationMap = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<any>(null);
   const [mapboxToken, setMapboxToken] = useState('');
   const [showTokenInput, setShowTokenInput] = useState(true);
+  const [selectedPoints, setSelectedPoints] = useState<string[]>([]);
+  const [currentRoute, setCurrentRoute] = useState<RouteData | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  
   const [pontos] = useState<DonationPoint[]>([
     {
       id: '1',
@@ -28,7 +42,8 @@ const DonationMap = () => {
       lng: -46.6333,
       type: 'coleta',
       horario: '08:00 - 18:00',
-      telefone: '(11) 1234-5678'
+      telefone: '(11) 1234-5678',
+      priority: 'alta'
     },
     {
       id: '2', 
@@ -38,7 +53,8 @@ const DonationMap = () => {
       lng: -46.6565,
       type: 'distribuicao',
       horario: '09:00 - 17:00',
-      telefone: '(11) 9876-5432'
+      telefone: '(11) 9876-5432',
+      priority: 'media'
     },
     {
       id: '3',
@@ -48,9 +64,54 @@ const DonationMap = () => {
       lng: -46.6886,
       type: 'coleta',
       horario: '24 horas',
-      telefone: '(11) 5555-4444'
+      telefone: '(11) 5555-4444',
+      priority: 'alta'
+    },
+    {
+      id: '4',
+      name: 'Mercado Solidário',
+      address: 'Av. Ibirapuera, 321 - Moema',
+      lat: -23.5732,
+      lng: -46.6500,
+      type: 'coleta',
+      horario: '06:00 - 22:00',
+      telefone: '(11) 7777-8888',
+      priority: 'media'
+    },
+    {
+      id: '5',
+      name: 'Centro Comunitário Esperança',
+      address: 'Rua das Acácias, 654 - Ipiranga',
+      lat: -23.5863,
+      lng: -46.6125,
+      type: 'distribuicao',
+      horario: '08:00 - 16:00',
+      telefone: '(11) 3333-2222',
+      priority: 'baixa'
     }
   ]);
+
+  // Salvar token no localStorage
+  useEffect(() => {
+    const savedToken = localStorage.getItem('mapboxToken');
+    if (savedToken) {
+      setMapboxToken(savedToken);
+      setShowTokenInput(false);
+      initializeMap(savedToken);
+    }
+  }, []);
+
+  // Obter localização do usuário
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation([position.coords.longitude, position.coords.latitude]);
+        },
+        (error) => console.log('Erro ao obter localização:', error)
+      );
+    }
+  }, []);
 
   const initializeMap = async (token: string) => {
     if (!mapContainer.current) return;
@@ -61,38 +122,107 @@ const DonationMap = () => {
       
       mapboxgl.default.accessToken = token;
       
-      const map = new mapboxgl.default.Map({
+      map.current = new mapboxgl.default.Map({
         container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/light-v11',
+        style: 'mapbox://styles/mapbox/streets-v12',
         center: [-46.6333, -23.5505],
-        zoom: 11,
-        pitch: 0,
+        zoom: 12,
+        pitch: 45,
       });
 
-      map.addControl(new mapboxgl.default.NavigationControl(), 'top-right');
+      // Adicionar controles de navegação
+      map.current.addControl(new mapboxgl.default.NavigationControl(), 'top-right');
+      map.current.addControl(new mapboxgl.default.FullscreenControl(), 'top-right');
+
+      // Adicionar controle de geolocalização
+      const geolocate = new mapboxgl.default.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true,
+        showUserHeading: true
+      });
+      map.current.addControl(geolocate, 'top-right');
+
+      // Adicionar marcador da localização do usuário
+      if (userLocation) {
+        const userMarker = document.createElement('div');
+        userMarker.className = 'w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg';
+        
+        new mapboxgl.default.Marker(userMarker)
+          .setLngLat(userLocation)
+          .addTo(map.current);
+      }
 
       // Adicionar marcadores para cada ponto
       pontos.forEach((ponto) => {
         const el = document.createElement('div');
-        el.className = `w-8 h-8 rounded-full flex items-center justify-center shadow-lg cursor-pointer transform transition-transform hover:scale-110 ${
+        el.className = `w-10 h-10 rounded-full flex items-center justify-center shadow-lg cursor-pointer transform transition-all hover:scale-110 border-2 border-white ${
           ponto.type === 'coleta' ? 'bg-primary' : 'bg-accent'
-        }`;
-        el.innerHTML = `<svg class="w-4 h-4 fill-white" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
+        } ${selectedPoints.includes(ponto.id) ? 'ring-4 ring-primary-light scale-110' : ''}`;
+        
+        el.innerHTML = `<svg class="w-5 h-5 fill-white" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
 
-        const popup = new mapboxgl.default.Popup({ offset: 25 }).setHTML(`
-          <div class="p-2">
-            <h3 class="font-semibold text-sm">${ponto.name}</h3>
-            <p class="text-xs text-gray-600 mt-1">${ponto.address}</p>
-            <p class="text-xs text-gray-500 mt-1">Horário: ${ponto.horario}</p>
-            ${ponto.telefone ? `<p class="text-xs text-gray-500">Tel: ${ponto.telefone}</p>` : ''}
+        // Popup com informações detalhadas
+        const popup = new mapboxgl.default.Popup({ 
+          offset: 25,
+          closeButton: false,
+          className: 'custom-popup'
+        }).setHTML(`
+          <div class="p-4 max-w-xs">
+            <div class="flex items-center gap-2 mb-2">
+              <h3 class="font-semibold text-sm">${ponto.name}</h3>
+              <span class="px-2 py-1 text-xs rounded-full ${
+                ponto.priority === 'alta' ? 'bg-red-100 text-red-800' :
+                ponto.priority === 'media' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-gray-100 text-gray-800'
+              }">${ponto.priority}</span>
+            </div>
+            <p class="text-xs text-gray-600 mb-2">${ponto.address}</p>
+            <div class="space-y-1 text-xs">
+              <p class="flex items-center gap-1">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                </svg>
+                ${ponto.horario}
+              </p>
+              ${ponto.telefone ? `
+                <p class="flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/>
+                  </svg>
+                  ${ponto.telefone}
+                </p>
+              ` : ''}
+            </div>
+            <div class="flex gap-2 mt-3">
+              <button onclick="togglePointSelection('${ponto.id}')" class="flex-1 px-3 py-1 text-xs rounded ${
+                selectedPoints.includes(ponto.id) ? 'bg-red-500 text-white' : 'bg-primary text-white'
+              }">
+                ${selectedPoints.includes(ponto.id) ? 'Remover' : 'Adicionar'}
+              </button>
+              <button onclick="navigateToPoint(${ponto.lng}, ${ponto.lat})" class="px-3 py-1 text-xs bg-accent text-white rounded">
+                Ir até
+              </button>
+            </div>
           </div>
         `);
+
+        // Click no marcador para selecionar ponto
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          togglePointSelection(ponto.id);
+        });
 
         new mapboxgl.default.Marker(el)
           .setLngLat([ponto.lng, ponto.lat])
           .setPopup(popup)
-          .addTo(map);
+          .addTo(map.current);
       });
+
+      // Função global para seleção de pontos
+      (window as any).togglePointSelection = togglePointSelection;
+      (window as any).navigateToPoint = navigateToPoint;
 
       setShowTokenInput(false);
     } catch (error) {
@@ -100,25 +230,139 @@ const DonationMap = () => {
     }
   };
 
+  const togglePointSelection = (pointId: string) => {
+    setSelectedPoints(prev => {
+      const newSelection = prev.includes(pointId) 
+        ? prev.filter(id => id !== pointId)
+        : [...prev, pointId];
+      
+      // Atualizar visual dos marcadores
+      if (map.current) {
+        pontos.forEach(ponto => {
+          const markers = document.querySelectorAll(`[data-point-id="${ponto.id}"]`);
+          markers.forEach(marker => {
+            if (newSelection.includes(ponto.id)) {
+              marker.classList.add('ring-4', 'ring-primary-light', 'scale-110');
+            } else {
+              marker.classList.remove('ring-4', 'ring-primary-light', 'scale-110');
+            }
+          });
+        });
+      }
+      
+      return newSelection;
+    });
+  };
+
+  const calculateRoute = async () => {
+    if (selectedPoints.length < 2 || !map.current) return;
+
+    const selectedPontos = pontos.filter(p => selectedPoints.includes(p.id));
+    const coordinates = selectedPontos.map(p => [p.lng, p.lat]);
+    
+    try {
+      const coordinatesString = coordinates.map(coord => coord.join(',')).join(';');
+      const response = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${coordinatesString}?geometries=geojson&access_token=${mapboxToken}`);
+      const data = await response.json();
+      
+      if (data.routes && data.routes[0]) {
+        const route = data.routes[0];
+        setCurrentRoute({
+          distance: route.distance,
+          duration: route.duration,
+          geometry: route.geometry.coordinates
+        });
+
+        // Adicionar rota ao mapa
+        if (map.current.getSource('route')) {
+          map.current.removeLayer('route');
+          map.current.removeSource('route');
+        }
+
+        map.current.addSource('route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: route.geometry
+          }
+        });
+
+        map.current.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#22c55e',
+            'line-width': 6,
+            'line-opacity': 0.8
+          }
+        });
+
+        // Ajustar visualização para mostrar toda a rota
+        const bounds = new (await import('mapbox-gl')).default.LngLatBounds();
+        coordinates.forEach(coord => bounds.extend(coord as [number, number]));
+        map.current.fitBounds(bounds, { padding: 50 });
+      }
+    } catch (error) {
+      console.error('Erro ao calcular rota:', error);
+    }
+  };
+
+  const navigateToPoint = (lng: number, lat: number) => {
+    if (map.current) {
+      map.current.flyTo({
+        center: [lng, lat],
+        zoom: 16,
+        pitch: 60,
+        duration: 2000
+      });
+    }
+  };
+
+  const clearRoute = () => {
+    if (map.current && map.current.getSource('route')) {
+      map.current.removeLayer('route');
+      map.current.removeSource('route');
+    }
+    setCurrentRoute(null);
+    setSelectedPoints([]);
+  };
+
   const handleTokenSubmit = () => {
     if (mapboxToken.trim()) {
+      localStorage.setItem('mapboxToken', mapboxToken);
       initializeMap(mapboxToken);
     }
+  };
+
+  const formatDistance = (meters: number) => {
+    return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+  };
+
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`;
   };
 
   return (
     <div className="space-y-6">
       {showTokenInput && (
         <Card className="p-6 bg-gradient-warm border-accent/20 shadow-soft">
-          <h3 className="text-lg font-semibold mb-4">Configure o Mapa</h3>
+          <h3 className="text-lg font-semibold mb-4">Configure o Mapa Interativo</h3>
           <p className="text-muted-foreground mb-4 text-sm">
-            Para visualizar o mapa interativo, insira seu token público do Mapbox.
-            Você pode obter um em{' '}
+            Para usar o mapa interativo com rotas (similar ao Google Maps), insira seu token público do Mapbox.
+            Você pode obter um gratuitamente em{' '}
             <a 
               href="https://mapbox.com/" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-primary hover:underline"
+              className="text-primary hover:underline font-medium"
             >
               mapbox.com
             </a>
@@ -142,12 +386,19 @@ const DonationMap = () => {
           <Card className="overflow-hidden shadow-card">
             <div 
               ref={mapContainer} 
-              className="w-full h-[500px] bg-muted flex items-center justify-center"
+              className="w-full h-[600px] bg-muted flex items-center justify-center"
             >
               {showTokenInput && (
                 <div className="text-center text-muted-foreground">
-                  <MapPin className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Configure o token do Mapbox para ver o mapa</p>
+                  <MapPin className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                  <h3 className="text-lg font-semibold mb-2">Mapa Interativo</h3>
+                  <p>Configure o token do Mapbox para usar:</p>
+                  <ul className="text-sm mt-2 space-y-1">
+                    <li>• Navegação estilo Google Maps</li>
+                    <li>• Cálculo de rotas otimizadas</li>
+                    <li>• Localização em tempo real</li>
+                    <li>• Marcadores interativos</li>
+                  </ul>
                 </div>
               )}
             </div>
@@ -155,6 +406,55 @@ const DonationMap = () => {
         </div>
 
         <div className="space-y-4">
+          {/* Controles de Rota */}
+          <Card className="p-4 shadow-soft">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Planejador de Rota</h3>
+              <Badge variant="outline" className="text-xs">
+                {selectedPoints.length} selecionados
+              </Badge>
+            </div>
+            
+            <div className="flex gap-2 mb-4">
+              <Button 
+                onClick={calculateRoute}
+                disabled={selectedPoints.length < 2}
+                className="flex-1 bg-gradient-primary text-sm"
+                size="sm"
+              >
+                <Route className="w-4 h-4 mr-1" />
+                Calcular Rota
+              </Button>
+              <Button 
+                onClick={clearRoute}
+                variant="outline"
+                size="sm"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {currentRoute && (
+              <div className="p-3 rounded-lg bg-gradient-subtle border space-y-2">
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <Car className="w-4 h-4 text-primary" />
+                  Rota Calculada
+                </h4>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Distância:</span>
+                    <div className="font-semibold">{formatDistance(currentRoute.distance)}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tempo:</span>
+                    <div className="font-semibold">{formatDuration(currentRoute.duration)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Lista de Pontos */}
           <Card className="p-4 shadow-soft">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Pontos de Coleta</h3>
@@ -164,22 +464,46 @@ const DonationMap = () => {
               </Button>
             </div>
             
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-80 overflow-y-auto">
               {pontos.map((ponto) => (
-                <div key={ponto.id} className="p-3 rounded-lg border bg-card hover:shadow-soft transition-all">
+                <div 
+                  key={ponto.id} 
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedPoints.includes(ponto.id) 
+                      ? 'bg-primary/10 border-primary shadow-soft' 
+                      : 'bg-card hover:shadow-soft'
+                  }`}
+                  onClick={() => togglePointSelection(ponto.id)}
+                >
                   <div className="flex items-start gap-3">
                     <div className={`w-3 h-3 rounded-full mt-1 ${
                       ponto.type === 'coleta' ? 'bg-primary' : 'bg-accent'
                     }`} />
                     <div className="flex-1 space-y-1">
-                      <h4 className="font-medium text-sm">{ponto.name}</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium text-sm">{ponto.name}</h4>
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs ${
+                            ponto.priority === 'alta' ? 'border-red-300 text-red-700' :
+                            ponto.priority === 'media' ? 'border-yellow-300 text-yellow-700' :
+                            'border-gray-300 text-gray-700'
+                          }`}
+                        >
+                          {ponto.priority}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-muted-foreground">{ponto.address}</p>
                       <p className="text-xs text-muted-foreground">⏰ {ponto.horario}</p>
-                      {ponto.telefone && (
-                        <p className="text-xs text-muted-foreground">📞 {ponto.telefone}</p>
-                      )}
                     </div>
-                    <Button size="sm" variant="ghost">
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigateToPoint(ponto.lng, ponto.lat);
+                      }}
+                    >
                       <Navigation className="w-4 h-4" />
                     </Button>
                   </div>
@@ -198,6 +522,10 @@ const DonationMap = () => {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-accent" />
                 <span>Pontos de Distribuição</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <span>Sua Localização</span>
               </div>
             </div>
           </Card>

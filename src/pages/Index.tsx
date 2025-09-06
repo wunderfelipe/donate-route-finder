@@ -91,6 +91,39 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Statistics Section */}
+      <section className="bg-muted/50 py-16">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Impacto em Números
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Juntos, estamos fazendo a diferença no combate ao desperdício alimentar
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold text-primary mb-2">1,200+</div>
+              <p className="text-muted-foreground">Refeições Resgatadas</p>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold text-accent mb-2">85</div>
+              <p className="text-muted-foreground">Pontos de Coleta</p>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold text-primary-light mb-2">350+</div>
+              <p className="text-muted-foreground">Voluntários Ativos</p>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold text-foreground mb-2">45</div>
+              <p className="text-muted-foreground">Estabelecimentos Parceiros</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="bg-gradient-warm py-16">
         <div className="container mx-auto px-4 text-center">
